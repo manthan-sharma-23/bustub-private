@@ -27,18 +27,19 @@ enum class AccessType { Unknown = 0, Lookup, Scan, Index };
 
 class LRUKNode {
  public:
-  /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
-  // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
-
-  typedef std::pair<size_t, AccessType> history_node;
-
-  std::list<history_node> history_;
+  std::list<size_t> history_;
   size_t k_;
   frame_id_t fid_;
   bool is_evictable_{false};
+  [[maybe_unused]] typedef std::pair<size_t, AccessType> history_node;
+
+  LRUKNode() = default;
+  LRUKNode(size_t k, frame_id_t fid) : k_(k), fid_(fid) {}
+  ~LRUKNode() = default;
 };
 
-/**
+/**clear
+
  * LRUKReplacer implements the LRU-k replacement policy.
  *
  * The LRU-k algorithm evicts a frame whose backward k-distance is maximum
@@ -100,7 +101,7 @@ class LRUKReplacer {
    * @param access_type type of access that was received. This parameter is only needed for
    * leaderboard tests.
    */
-  void RecordAccess(frame_id_t frame_id, AccessType access_type = AccessType::Unknown);
+  void RecordAccess(frame_id_t frame_id);
 
   /**
    * TODO(P1): Add implementation

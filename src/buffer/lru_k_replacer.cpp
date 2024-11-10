@@ -21,14 +21,15 @@
 
 namespace bustub {
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {
+  for (size_t i = 0; i < replacer_size_; i++) {
+    node_store_[i].fid_ = i;
+    node_store_[i].is_evictable_ = false;
+  }
+}
 
 auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   std::lock_guard<std::mutex> lock(latch_);
-
-  if (replacer_size_ == 0) {
-    return std::nullopt;
-  }
 
   current_timestamp_++;
 
@@ -39,32 +40,26 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   std::unordered_map<frame_id_t, LRUKNode> infinitely_distanced_frames;
   std::unordered_map<frame_id_t, LRUKNode> evictable_frames;
 
-  for (const auto &node_pair : node_store_) {
-    LRUKNode node = node_pair.second;
+  for (const auto &[_fid, node] : node_store_) {
+    if (node.is_evictable_) {
+      const bool is_infinite_k = node.history_.size() < k_;
 
-    if (!node.is_evictable_) {
-      continue;
-    }
-
-    const bool is_infinite_k = node.history_.size() < k_;
-
-    if (is_infinite_k) {
-      infinitely_distanced_frames[node.fid_] = node;
-
-    } else {
-      evictable_frames[node.fid_] = node;
+      if (is_infinite_k) {
+        infinitely_distanced_frames[node.fid_] = node;
+        evictable_frames.erase(node.fid_);
+      } else {
+        evictable_frames[node.fid_] = node;
+        infinitely_distanced_frames.erase(node.fid_);
+      }
     }
   }
 
   if (!infinitely_distanced_frames.empty()) {
     auto evicted_frame_id = infinitely_distanced_frames.begin()->first;
-    auto latest_history_node = infinitely_distanced_frames[evicted_frame_id].history_.back();
 
     for (const auto &[frame_id, node] : infinitely_distanced_frames) {
       auto last_access_timestamp = node.history_.back();
-
-      if (last_access_timestamp.first < latest_history_node.first) {
-        latest_history_node = last_access_timestamp;
+      if (last_access_timestamp < node_store_[evicted_frame_id].history_.back()) {
         evicted_frame_id = frame_id;
       }
     }
@@ -76,19 +71,17 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   }
 
   if (!evictable_frames.empty()) {
-    size_t max_kth_distance;
+    size_t max_kth_distance = 0;
     frame_id_t frame_id{-1};
 
     for (const auto &[fid, node] : evictable_frames) {
       if (node.history_.size() >= k_) {
         auto history_itr = node.history_.begin();
         std::advance(history_itr, node.history_.size() - k_);
-
         auto stamp = *history_itr;
+        size_t kth_distance = current_timestamp_ - stamp;
 
-        size_t kth_distance = current_timestamp_ - (stamp.first + static_cast<size_t>(stamp.second));
-
-        if (kth_distance > max_kth_distance) {
+        if (kth_distance > max_kth_distance || frame_id == -1) {
           max_kth_distance = kth_distance;
           frame_id = fid;
         }
@@ -106,27 +99,33 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   return std::nullopt;
 }
 
-void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
+void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
   std::lock_guard<std::mutex> lock(latch_);
 
   current_timestamp_++;
 
-  if (node_store_.find(frame_id) == node_store_.end()) {
-    throw Exception("Frame not found in the replacer");
+  if (static_cast<size_t>(frame_id) > replacer_size_) {
+    throw Exception("Frame id is greater than the replacer size");
   }
 
-  node_store_[frame_id].history_.push_back({current_timestamp_, access_type});
+  if (node_store_.find(frame_id) == node_store_.end()) {
+    node_store_[frame_id] = LRUKNode(k_, frame_id);
+  }
+
+  node_store_[frame_id].history_.push_back(current_timestamp_);
+  return;
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   std::lock_guard<std::mutex> lock(latch_);
   if (node_store_.find(frame_id) == node_store_.end()) {
-    throw Exception("Frame not found in the replacer");
+    throw Exception("Frame id not found in the replacer");
   }
 
   if (node_store_[frame_id].is_evictable_ && !set_evictable) {
     curr_size_--;
-  } else if (!node_store_[frame_id].is_evictable_ && set_evictable) {
+  }
+  if (!node_store_[frame_id].is_evictable_ && set_evictable) {
     curr_size_++;
   }
 
@@ -146,6 +145,9 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   node_store_.erase(frame_id);
 }
 
-auto LRUKReplacer::Size() -> size_t { return curr_size_; }
+auto LRUKReplacer::Size() -> size_t {
+  std::lock_guard<std::mutex> lock(latch_);
+  return curr_size_;
+}
 
 }  // namespace bustub
