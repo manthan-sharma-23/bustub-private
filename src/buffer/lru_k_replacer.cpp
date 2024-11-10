@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_k_replacer.h"
+#include <algorithm>
 #include <iterator>
 #include <mutex>
 #include <optional>
@@ -55,19 +56,22 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   }
 
   if (!infinitely_distanced_frames.empty()) {
-    auto evicted_frame_id = infinitely_distanced_frames.begin()->first;
+    frame_id_t frame_id{-1};
+    size_t oldest_timestamp = std::numeric_limits<size_t>::max();
 
-    for (const auto &[frame_id, node] : infinitely_distanced_frames) {
-      auto last_access_timestamp = node.history_.back();
-      if (last_access_timestamp < node_store_[evicted_frame_id].history_.back()) {
-        evicted_frame_id = frame_id;
+    for (const auto &[fid, node] : infinitely_distanced_frames) {
+      size_t timestamp = node.history_.back();
+      if (timestamp < oldest_timestamp) {
+        oldest_timestamp = timestamp;
+        frame_id = fid;
       }
     }
-
-    node_store_[evicted_frame_id].history_.clear();
-    node_store_[evicted_frame_id].is_evictable_ = false;
-    curr_size_--;
-    return evicted_frame_id;
+    if (frame_id != -1) {
+      node_store_[frame_id].history_.clear();
+      node_store_[frame_id].is_evictable_ = false;
+      curr_size_--;
+      return frame_id;
+    }
   }
 
   if (!evictable_frames.empty()) {

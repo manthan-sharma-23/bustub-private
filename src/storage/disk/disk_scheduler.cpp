@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/disk/disk_scheduler.h"
+#include <memory>
+#include <utility>
 #include "common/exception.h"
 #include "storage/disk/disk_manager.h"
 
@@ -34,8 +36,26 @@ DiskScheduler::~DiskScheduler() {
   }
 }
 
-void DiskScheduler::Schedule(DiskRequest r) {}
+void DiskScheduler::Schedule(DiskRequest r) { request_queue_.Put(std::move(r)); }
 
-void DiskScheduler::StartWorkerThread() {}
+void DiskScheduler::StartWorkerThread() {
+  while (true) {
+    try {
+      auto request = request_queue_.Get();
+      if (request.has_value()) {
+        if (request->is_write_) {
+          disk_manager_->WritePage(request->page_id_, request->data_);
+        } else {
+          disk_manager_->ReadPage(request->page_id_, request->data_);
+        }
+
+        request->callback_.set_value(true);
+      }
+
+    } catch (...) {
+      throw Exception("DiskScheduler worker thread failed");
+    }
+  }
+}
 
 }  // namespace bustub
