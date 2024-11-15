@@ -41,7 +41,6 @@ struct DiskRequest {
   /** Callback used to signal to the request issuer when the request has been completed. */
   std::promise<bool> callback_;
 };
-
 /**
  * @brief The DiskScheduler schedules disk read and write operations.
  *

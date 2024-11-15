@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager.h"
-#include <mutex>
 
 namespace bustub {
 
@@ -123,12 +122,7 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
  *
  * @return The page ID of the newly allocated page.
  */
-auto BufferPoolManager::NewPage() -> page_id_t {
-  std::lock_guard<std::mutex> lock(*bpm_latch_);
-  auto page_id = next_page_id_.fetch_add(1);
-
-  return page_id;
-}
+auto BufferPoolManager::NewPage() -> page_id_t { UNIMPLEMENTED("TODO(P1): Add implementation."); }
 
 /**
  * @brief Removes a page from the database, both on disk and in memory.
