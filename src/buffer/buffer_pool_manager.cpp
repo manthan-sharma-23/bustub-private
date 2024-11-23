@@ -11,9 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager.h"
-#include <mutex>
-#include "storage/disk/disk_scheduler.h"
-#include "storage/page/page_guard.h"
 
 namespace bustub {
 
@@ -125,42 +122,7 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
  *
  * @return The page ID of the newly allocated page.
  */
-auto BufferPoolManager::NewPage() -> page_id_t {
-  std::scoped_lock latch(*bpm_latch_);
-
-  // Increment the next page ID atomically.
-  page_id_t page_id = next_page_id_++;
-
-  // Ensure there is enough disk space.
-  disk_scheduler_->IncreaseDiskSpace(1);
-
-  // Insert the page into the buffer pool if there is free space.
-  if (!free_frames_.empty()) {
-    frame_id_t frame_id = free_frames_.front();
-    free_frames_.pop_front();
-
-    // Initialize the frame.
-    frames_[frame_id]->Reset();
-    page_table_[page_id] = frame_id;
-
-    // Return the newly allocated page ID.
-    return page_id;
-  }
-
-  // If no free frames, evict a page to free up space.
-  auto evicted_frame_id = replacer_->Evict();
-  if (evicted_frame_id.has_value()) {
-    free_frames_.push_back(evicted_frame_id.value());
-  }
-
-  // Now try again to insert the page into the buffer pool.
-  frame_id_t frame_id = free_frames_.front();
-  free_frames_.pop_front();
-  frames_[frame_id]->Reset();
-  page_table_[page_id] = frame_id;
-
-  return page_id;
-}
+auto BufferPoolManager::NewPage() -> page_id_t { UNIMPLEMENTED("TODO(P1): Add implementation."); }
 
 /**
  * @brief Removes a page from the database, both on disk and in memory.
@@ -188,31 +150,7 @@ auto BufferPoolManager::NewPage() -> page_id_t {
  * @param page_id The page ID of the page we want to delete.
  * @return `false` if the page exists but could not be deleted, `true` if the page didn't exist or deletion succeeded.
  */
-auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
-  std::scoped_lock latch(*bpm_latch_);
-
-  // Check if the page exists in the buffer pool.
-  if (page_table_.find(page_id) == page_table_.end()) {
-    return false;  // Page doesn't exist.
-  }
-
-  // Get the corresponding frame ID.
-  frame_id_t frame_id = page_table_[page_id];
-
-  // Check if the page is pinned.
-  if (frames_[frame_id]->pin_count_ > 0) {
-    return false;  // Page is pinned, cannot be deleted.
-  }
-
-  // Unload the page and remove it from the page table.
-  frames_[frame_id]->Reset();
-  page_table_.erase(page_id);
-
-  // Free up the frame.
-  free_frames_.push_back(frame_id);
-
-  return true;
-}
+auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { UNIMPLEMENTED("TODO(P1): Add implementation."); }
 
 /**
  * @brief Acquires an optional write-locked guard over a page of data. The user can specify an `AccessType` if needed.
@@ -254,37 +192,7 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
  * returns `std::nullopt`, otherwise returns a `WritePageGuard` ensuring exclusive and mutable access to a page's data.
  */
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
-  std::scoped_lock latch(*bpm_latch_);
-
-  // Check if the page is in the buffer pool.
-  if (page_table_.find(page_id) != page_table_.end()) {
-    frame_id_t frame_id = page_table_[page_id];
-    return WritePageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
-  }
-
-  // If the page is not in the buffer pool and we have free frames, load it in.
-  if (!free_frames_.empty()) {
-    frame_id_t frame_id = free_frames_.front();
-    free_frames_.pop_front();
-    page_table_[page_id] = frame_id;
-
-    frames_[frame_id]->Reset();
-
-    return WritePageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
-  }
-
-  // If no free frames, evict a page and load this one.
-  auto evicted_frame_id = replacer_->Evict();
-  if (evicted_frame_id.has_value()) {
-    free_frames_.push_back(evicted_frame_id.value());
-  }
-
-  frame_id_t frame_id = free_frames_.front();
-  free_frames_.pop_front();
-  page_table_[page_id] = frame_id;
-  frames_[frame_id]->Reset();
-
-  return WritePageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
+  UNIMPLEMENTED("TODO(P1): Add implementation.");
 }
 
 /**
@@ -312,37 +220,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * returns `std::nullopt`, otherwise returns a `ReadPageGuard` ensuring shared and read-only access to a page's data.
  */
 auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_type) -> std::optional<ReadPageGuard> {
-  std::scoped_lock latch(*bpm_latch_);
-
-  // Check if the page is in the buffer pool.
-  if (page_table_.find(page_id) != page_table_.end()) {
-    frame_id_t frame_id = page_table_[page_id];
-    return ReadPageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
-  }
-
-  // If the page is not in the buffer pool and we have free frames, load it in.
-  if (!free_frames_.empty()) {
-    frame_id_t frame_id = free_frames_.front();
-    free_frames_.pop_front();
-    page_table_[page_id] = frame_id;
-
-    frames_[frame_id]->Reset();
-
-    return ReadPageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
-  }
-
-  // If no free frames, evict a page and load this one.
-  auto evicted_frame_id = replacer_->Evict();
-  if (evicted_frame_id.has_value()) {
-    free_frames_.push_back(evicted_frame_id.value());
-  }
-
-  frame_id_t frame_id = free_frames_.front();
-  free_frames_.pop_front();
-  page_table_[page_id] = frame_id;
-  frames_[frame_id]->Reset();
-
-  return ReadPageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
+  UNIMPLEMENTED("TODO(P1): Add implementation.");
 }
 
 /**
@@ -411,23 +289,7 @@ auto BufferPoolManager::ReadPage(page_id_t page_id, AccessType access_type) -> R
  * @param page_id The page ID of the page to be flushed.
  * @return `false` if the page could not be found in the page table, otherwise `true`.
  */
-auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
-  std::scoped_lock latch(*bpm_latch_);
-  if (page_table_.find(page_id) == page_table_.end()) {
-    return false;
-  }
-  frame_id_t frame_id = page_table_[page_id];
-  if (frames_[frame_id]->is_dirty_) {
-    DiskRequest r;
-    r.page_id_ = page_id;
-    r.data_ = frames_[frame_id]->GetDataMut();
-    r.is_write_ = true;
-    disk_scheduler_->Schedule(std::move(r));
-
-    frames_[frame_id]->is_dirty_ = false;
-  }
-  return true;
-}
+auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool { UNIMPLEMENTED("TODO(P1): Add implementation."); }
 
 /**
  * @brief Flushes all page data that is in memory to disk.
@@ -439,13 +301,7 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
  *
  * TODO(P1): Add implementation
  */
-void BufferPoolManager::FlushAllPages() {
-  std::scoped_lock latch(*bpm_latch_);
-
-  for (auto &pair : page_table_) {
-    FlushPage(pair.first);
-  }
-}
+void BufferPoolManager::FlushAllPages() { UNIMPLEMENTED("TODO(P1): Add implementation."); }
 
 /**
  * @brief Retrieves the pin count of a page. If the page does not exist in memory, return `std::nullopt`.
