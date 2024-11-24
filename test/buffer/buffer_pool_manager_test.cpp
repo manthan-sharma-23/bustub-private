@@ -35,6 +35,8 @@ TEST(BufferPoolManagerTest, VeryBasicTest) {
 
   page_id_t pid = bpm->NewPage();
 
+  std::cout << "PID : " << pid << std::endl;
+
   char str[] = "Hello, world!";
 
   // Check `WritePageGuard` basic functionality.
@@ -59,7 +61,9 @@ TEST(BufferPoolManagerTest, VeryBasicTest) {
     EXPECT_STREQ(data, str);
   }
 
-  ASSERT_TRUE(bpm->DeletePage(pid));
+  auto deleted_ = bpm->DeletePage(pid);
+  std::cout << "If deleted : " << deleted_ << std::endl;
+  ASSERT_TRUE(deleted_);
 }
 
 TEST(BufferPoolManagerTest, PagePinEasyTest) {
