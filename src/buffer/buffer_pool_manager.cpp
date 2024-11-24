@@ -160,17 +160,18 @@ auto BufferPoolManager::NewPage() -> page_id_t {
           disk_scheduler_->Schedule(std::move(write_request));
 
           future.get();
-          page_table_.erase(entry.first);
           break;
         }
       }
+
+      frame->is_dirty_ = false;
+      frame->pin_count_.store(0);
     }
   }
 
   page_id_t new_page_id = next_page_id_.fetch_add(1);
-  page_table_[new_page_id] = frame_id;
+  page_table_.insert({new_page_id, frame_id});
   auto frame = frames_[frame_id];
-  frame->Reset();
 
   disk_scheduler_->IncreaseDiskSpace(1);
   return new_page_id;
@@ -320,13 +321,11 @@ auto BufferPoolManager::GetFreeFrame(page_id_t page_id) -> std::optional<frame_i
         disk_scheduler_->Schedule(std::move(write_request));
 
         write_future.get();
-        page_table_.erase(entry.first);
         break;
       }
     }
 
     page_table_[page_id] = frame_id;
-    frame->Reset();
   }
 
   return frame_id;
@@ -456,7 +455,7 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
   frame_id_t frame_id = it->second;
   auto frame = frames_[frame_id];
 
-  if (frame->is_dirty_) {
+  if (frame->is_dirty_ && frame->pin_count_.load() == 0) {
     auto promise = disk_scheduler_->CreatePromise();
     auto future = promise.get_future();
 
@@ -484,21 +483,7 @@ void BufferPoolManager::FlushAllPages() {
   std::scoped_lock<std::mutex> lock(*bpm_latch_);
 
   for (const auto &entry : page_table_) {
-    page_id_t page_id = entry.first;
-    frame_id_t frame_id = entry.second;
-    auto frame = frames_[frame_id];
-
-    if (frame->is_dirty_) {
-      auto promise = disk_scheduler_->CreatePromise();
-      auto future = promise.get_future();
-
-      DiskRequest write_request{
-          .is_write_ = true, .data_ = frame->GetDataMut(), .page_id_ = page_id, .callback_ = std::move(promise)};
-      disk_scheduler_->Schedule(std::move(write_request));
-
-      future.get();
-      frame->is_dirty_ = false;
-    }
+    FlushPage(entry.first);
   }
 }
 /**
@@ -526,7 +511,7 @@ void BufferPoolManager::FlushAllPages() {
  * @return std::optional<size_t> The pin count if the page exists, otherwise `std::nullopt`.
  */
 auto BufferPoolManager::GetPinCount(page_id_t page_id) -> std::optional<size_t> {
-  std::scoped_lock<std::mutex> lock(*bpm_latch_);
+  std::scoped_lock<std::mutex> latch(*bpm_latch_);
 
   auto it = page_table_.find(page_id);
   if (it == page_table_.end()) {
@@ -534,7 +519,7 @@ auto BufferPoolManager::GetPinCount(page_id_t page_id) -> std::optional<size_t> 
   }
 
   frame_id_t frame_id = it->second;
-  return frames_[frame_id]->pin_count_;
+  return frames_[frame_id]->pin_count_.load();
 }
 
 }  // namespace bustub
