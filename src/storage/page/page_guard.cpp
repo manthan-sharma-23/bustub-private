@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/page_guard.h"
+#include <atomic>
 #include <mutex>
+#include <shared_mutex>
 
 namespace bustub {
 
@@ -30,13 +32,10 @@ namespace bustub {
 ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                              std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  if (!frame_->rwlatch_.try_lock()) {
-    bpm_latch_->unlock();
-    frame_->rwlatch_.lock_shared();
-    bpm_latch_->lock();
-  }
+  frame_->rwlatch_.lock_shared();
   frame_->pin_count_.fetch_add(1);
-  replacer->SetEvictable(frame_->frame_id_, false);
+  replacer_->SetEvictable(frame_->frame_id_, false);
+  replacer_->RecordAccess(frame_->frame_id_);
 }
 
 /**
@@ -132,7 +131,7 @@ void ReadPageGuard::Drop() {
     std::cout << "WritePageGuard::Drop() called" << std::endl;
     std::scoped_lock<std::mutex> latch(*bpm_latch_);
     frame_->pin_count_.fetch_sub(1);
-    if (frame_->pin_count_.load() == 0 && !frame_->is_dirty_) {
+    if (frame_->pin_count_.load() == 0) {
       replacer_->SetEvictable(frame_->frame_id_, true);
     }
     frame_->rwlatch_.unlock_shared();
@@ -161,16 +160,11 @@ ReadPageGuard::~ReadPageGuard() { Drop(); }
 WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                                std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  if (!frame_->rwlatch_.try_lock()) {
-    bpm_latch_->unlock();
-    frame_->rwlatch_.lock();
-    bpm_latch_->lock();
-  }
+  frame_->rwlatch_.lock();
   frame_->pin_count_.fetch_add(1);
-
   frame->is_dirty_ = true;
-
   replacer_->SetEvictable(frame_->frame_id_, false);
+  replacer_->RecordAccess(frame_->frame_id_);
 }
 
 /**
@@ -272,12 +266,12 @@ auto WritePageGuard::IsDirty() const -> bool {
 void WritePageGuard::Drop() {
   if (is_valid_) {
     std::cout << "WritePageGuard::Drop() called" << std::endl;
-    frame_->rwlatch_.unlock();
     std::scoped_lock<std::mutex> latch(*bpm_latch_);
     frame_->pin_count_.fetch_sub(1);
     if (frame_->pin_count_.load() == 0) {
       replacer_->SetEvictable(frame_->frame_id_, true);
     }
+    frame_->rwlatch_.unlock();
     is_valid_ = false;
   }
 }

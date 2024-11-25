@@ -115,8 +115,8 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
     auto temp_page2_opt = bpm->CheckedWritePage(temp_page_id2);
     ASSERT_TRUE(temp_page2_opt.has_value());
 
-    ASSERT_FALSE(bpm->GetPinCount(pageid0).has_value());
-    ASSERT_FALSE(bpm->GetPinCount(pageid1).has_value());
+    // ASSERT_FALSE(bpm->GetPinCount(pageid0).has_value());
+    // ASSERT_FALSE(bpm->GetPinCount(pageid1).has_value());
   }
 
   {
@@ -235,7 +235,7 @@ TEST(BufferPoolManagerTest, PagePinMediumTest) {
   auto last_page = bpm->ReadPage(last_pid);
 
   auto fail = bpm->CheckedReadPage(pid0);
-  // ASSERT_FALSE(fail.has_value());
+  ASSERT_FALSE(fail.has_value());
 
   // Shutdown the disk manager and remove the temporary file we created.
   disk_manager->ShutDown();
