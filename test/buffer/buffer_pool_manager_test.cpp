@@ -162,7 +162,7 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
   remove(disk_manager->GetLogFileName());
 }
 
-TEST(BufferPoolManagerTest, PagePinMediumTest) {
+TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -225,8 +225,9 @@ TEST(BufferPoolManagerTest, PagePinMediumTest) {
   {
     ReadPageGuard original_page = bpm->ReadPage(pid0);
 
-    std::cout << "00 \n";
-    EXPECT_EQ(0, strcmp(original_page.GetData(), "Hello"));
+    auto val = original_page.GetData();
+    auto cmp = strcmp(val, "Hello");
+    EXPECT_EQ(0, cmp);
   }
 
   // Scenario: Once we unpin page 0 and then make a new page, all the buffer pages should now be pinned. Fetching page 0

@@ -14,6 +14,7 @@
 #include <atomic>
 #include <mutex>
 #include <shared_mutex>
+#include "common/config.h"
 
 namespace bustub {
 
@@ -32,8 +33,9 @@ namespace bustub {
 ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                              std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  frame_->rwlatch_.lock_shared();
+  std::shared_lock<std::shared_mutex> read_shared_lock(frame_->rwlatch_);
   frame_->pin_count_.fetch_add(1);
+  if (frame->page_id != page_id) frame_->page_id = page_id;
   replacer_->SetEvictable(frame_->frame_id_, false);
   replacer_->RecordAccess(frame_->frame_id_);
 }
@@ -132,6 +134,7 @@ void ReadPageGuard::Drop() {
     std::scoped_lock<std::mutex> latch(*bpm_latch_);
     frame_->pin_count_.fetch_sub(1);
     if (frame_->pin_count_.load() == 0) {
+      frame_->page_id = INVALID_PAGE_ID;
       replacer_->SetEvictable(frame_->frame_id_, true);
     }
     frame_->rwlatch_.unlock_shared();
@@ -160,8 +163,9 @@ ReadPageGuard::~ReadPageGuard() { Drop(); }
 WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                                std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  frame_->rwlatch_.lock();
+  std::unique_lock<std::shared_mutex> write_unqiue_lock(frame->rwlatch_);
   frame_->pin_count_.fetch_add(1);
+  if (frame->page_id != page_id) frame_->page_id = page_id;
   frame->is_dirty_ = true;
   replacer_->SetEvictable(frame_->frame_id_, false);
   replacer_->RecordAccess(frame_->frame_id_);
@@ -269,6 +273,7 @@ void WritePageGuard::Drop() {
     std::scoped_lock<std::mutex> latch(*bpm_latch_);
     frame_->pin_count_.fetch_sub(1);
     if (frame_->pin_count_.load() == 0) {
+      frame_->page_id = INVALID_PAGE_ID;
       replacer_->SetEvictable(frame_->frame_id_, true);
     }
     frame_->rwlatch_.unlock();
