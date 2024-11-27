@@ -127,6 +127,7 @@ class BufferPoolManager {
   void FlushAllPages();
   auto GetFreeFrame(page_id_t page_id) -> std::optional<frame_id_t>;
   auto GetPinCount(page_id_t page_id) -> std::optional<size_t>;
+  auto LoadPage(page_id_t page_id, frame_id_t frame_id) -> bool;
 
  private:
   /** @brief The number of frames in the buffer pool. */

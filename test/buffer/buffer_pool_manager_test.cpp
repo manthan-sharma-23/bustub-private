@@ -66,7 +66,7 @@ TEST(BufferPoolManagerTest, VeryBasicTest) {
   ASSERT_TRUE(deleted_);
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
+TEST(BufferPoolManagerTest, PagePinEasyTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(2, disk_manager.get(), 5);
 
@@ -115,8 +115,8 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
     auto temp_page2_opt = bpm->CheckedWritePage(temp_page_id2);
     ASSERT_TRUE(temp_page2_opt.has_value());
 
-    // ASSERT_FALSE(bpm->GetPinCount(pageid0).has_value());
-    // ASSERT_FALSE(bpm->GetPinCount(pageid1).has_value());
+    ASSERT_FALSE(bpm->GetPinCount(pageid0).has_value());
+    ASSERT_FALSE(bpm->GetPinCount(pageid1).has_value());
   }
 
   {
@@ -162,7 +162,7 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
   remove(disk_manager->GetLogFileName());
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
+TEST(BufferPoolManagerTest, PagePinMediumTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -243,7 +243,7 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
   remove(db_fname);
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PageAccessTest) {
+TEST(BufferPoolManagerTest, PageAccessTest) {
   const size_t rounds = 50;
 
   auto disk_manager = std::make_shared<DiskManager>(db_fname);

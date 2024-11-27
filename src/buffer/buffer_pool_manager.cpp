@@ -12,6 +12,7 @@
 
 #include "buffer/buffer_pool_manager.h"
 #include <algorithm>
+#include <cstring>
 #include <mutex>
 #include <optional>
 #include <utility>
@@ -174,12 +175,10 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   frame_id_t frame_id = it->second;
   auto frame = frames_[frame_id];
 
-  // Cannot delete a pinned page
   if (frame->pin_count_ > 0) {
     return false;
   }
 
-  // If the page is dirty, we need to write it back before deletion
   if (frame->is_dirty_) {
     auto promise = disk_scheduler_->CreatePromise();
     auto future = promise.get_future();
@@ -191,19 +190,11 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
     future.get();
   }
 
-  // Remove page from page table
   page_table_.erase(it);
-
-  // Reset frame and add to free list
   frame->Reset();
   free_frames_.push_back(frame_id);
-
-  // Remove from replacer
   replacer_->Remove(frame_id);
-
-  // Deallocate the page on disk
   disk_scheduler_->DeallocatePage(page_id);
-
   return true;
 }
 /**
@@ -246,33 +237,28 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
  * returns `std::nullopt`, otherwise returns a `WritePageGuard` ensuring exclusive and mutable access to a page's data.
  */
 auto BufferPoolManager::GetFreeFrame(page_id_t page_id) -> std::optional<frame_id_t> {
-  // Check if the page already exists in the page table
   auto it = page_table_.find(page_id);
   if (it != page_table_.end()) {
-    return it->second;  // Return the existing frame_id
+    return it->second;
   }
 
   frame_id_t frame_id;
 
-  // Try to get a free frame from the free list
   if (!free_frames_.empty()) {
     frame_id = free_frames_.front();
     free_frames_.pop_front();
   } else {
-    // Evict a frame if no free frames are available
     auto temp_frame_id = replacer_->Evict();
     if (!temp_frame_id.has_value()) {
-      return std::nullopt;  // No frame available for eviction
+      return std::nullopt;
     }
     frame_id = temp_frame_id.value();
 
-    // Handle dirty page eviction
     auto frame = frames_[frame_id];
     if (frame->is_dirty_) {
       auto write_promise = disk_scheduler_->CreatePromise();
       auto write_future = write_promise.get_future();
 
-      // Find the page_id associated with the frame being evicted
       for (const auto &entry : page_table_) {
         if (entry.second == frame_id) {
           DiskRequest write_request{.is_write_ = true,
@@ -287,7 +273,6 @@ auto BufferPoolManager::GetFreeFrame(page_id_t page_id) -> std::optional<frame_i
       frame->is_dirty_ = false;
     }
 
-    // Remove the evicted page from the page table
     for (auto it = page_table_.begin(); it != page_table_.end(); ++it) {
       if (it->second == frame_id) {
         page_table_.erase(it);
@@ -297,9 +282,27 @@ auto BufferPoolManager::GetFreeFrame(page_id_t page_id) -> std::optional<frame_i
   }
 
   page_table_.insert({page_id, frame_id});
-  // Reset the frame for reuse and return its id
   frames_[frame_id]->Reset();
+  LoadPage(page_id, frame_id);
   return frame_id;
+}
+
+auto BufferPoolManager::LoadPage(page_id_t page_id, frame_id_t frame_id) -> bool {
+  auto promise = disk_scheduler_->CreatePromise();
+  auto future = promise.get_future();
+
+  auto &frame = frames_[frame_id];
+  DiskRequest read_request{
+      .is_write_ = false, .data_ = frame->GetDataMut(), .page_id_ = page_id, .callback_ = std::move(promise)};
+
+  disk_scheduler_->Schedule(std::move(read_request));
+  auto read_success = future.get();
+
+  if (read_success) {
+    frame->pin_count_.store(0);
+    frame->is_dirty_ = false;
+  }
+  return read_success;
 }
 
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
