@@ -33,11 +33,13 @@ namespace bustub {
 ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                              std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  frame_->rwlatch_.lock_shared();
+  if (!frame_->rwlatch_.try_lock_shared()) {
+    bpm_latch_->unlock();
+    frame_->rwlatch_.lock_shared();
+    bpm_latch_->lock();
+  }
   frame_->pin_count_.fetch_add(1);
   if (frame->page_id != page_id) frame_->page_id = page_id;
-  replacer_->SetEvictable(frame_->frame_id_, false);
-  replacer_->RecordAccess(frame_->frame_id_);
 }
 
 /**
@@ -162,7 +164,11 @@ ReadPageGuard::~ReadPageGuard() { Drop(); }
 WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                                std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(frame), replacer_(replacer), bpm_latch_(bpm_latch), is_valid_(true) {
-  frame_->rwlatch_.lock();
+  if (!frame_->rwlatch_.try_lock()) {
+    bpm_latch_->unlock();
+    frame_->rwlatch_.lock();
+    bpm_latch_->lock();
+  }
   frame_->pin_count_.fetch_add(1);
   if (frame->page_id != page_id) frame_->page_id = page_id;
   frame->is_dirty_ = true;

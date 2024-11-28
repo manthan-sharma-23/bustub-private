@@ -306,13 +306,15 @@ auto BufferPoolManager::LoadPage(page_id_t page_id, frame_id_t frame_id) -> bool
 }
 
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
-  std::scoped_lock<std::mutex> latch(*bpm_latch_);
+  std::unique_lock<std::mutex> latch(*bpm_latch_);
 
   auto frame_id = GetFreeFrame(page_id);
 
   if (!frame_id.has_value()) return std::nullopt;
 
   auto &frame = frames_[frame_id.value()];
+  replacer_->SetEvictable(frame_id.value(), false);
+  replacer_->RecordAccess(frame_id.value());
 
   return WritePageGuard(page_id, std::shared_ptr(frame), std::shared_ptr(replacer_), std::shared_ptr(bpm_latch_));
 }
@@ -342,11 +344,13 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * returns `std::nullopt`, otherwise returns a `ReadPageGuard` ensuring shared and read-only access to a page's data.
  */
 auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_type) -> std::optional<ReadPageGuard> {
-  std::scoped_lock<std::mutex> latch(*bpm_latch_);
+  std::unique_lock<std::mutex> latch(*bpm_latch_);
 
   auto frame_id = GetFreeFrame(page_id);
 
   if (!frame_id.has_value()) return std::nullopt;
+  replacer_->SetEvictable(frame_id.value(), false);
+  replacer_->RecordAccess(frame_id.value());
 
   return ReadPageGuard(page_id, std::shared_ptr(frames_[frame_id.value()]), std::shared_ptr(replacer_),
                        std::shared_ptr(bpm_latch_));
