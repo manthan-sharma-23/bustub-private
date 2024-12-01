@@ -281,7 +281,7 @@ TEST(BufferPoolManagerTest, PageAccessTest) {
   thread.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_ContentionTest) {
+TEST(BufferPoolManagerTest, ContentionTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -323,7 +323,7 @@ TEST(BufferPoolManagerTest, DISABLED_ContentionTest) {
   thread1.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
+TEST(BufferPoolManagerTest, DeadlockTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -363,7 +363,7 @@ TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
   child.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_EvictableTest) {
+TEST(BufferPoolManagerTest, EvictableTest) {
   // Test if the evictable status of a frame is always correct.
   size_t rounds = 1000;
   size_t num_readers = 8;

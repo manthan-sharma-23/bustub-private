@@ -306,7 +306,7 @@ auto BufferPoolManager::LoadPage(page_id_t page_id, frame_id_t frame_id) -> bool
 }
 
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
-  std::unique_lock<std::mutex> latch(*bpm_latch_);
+  std::scoped_lock<std::mutex> latch(*bpm_latch_);
 
   auto frame_id = GetFreeFrame(page_id);
 
@@ -344,7 +344,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * returns `std::nullopt`, otherwise returns a `ReadPageGuard` ensuring shared and read-only access to a page's data.
  */
 auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_type) -> std::optional<ReadPageGuard> {
-  std::unique_lock<std::mutex> latch(*bpm_latch_);
+  std::scoped_lock<std::mutex> latch(*bpm_latch_);
 
   auto frame_id = GetFreeFrame(page_id);
 

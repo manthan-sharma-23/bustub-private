@@ -172,8 +172,6 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
   frame_->pin_count_.fetch_add(1);
   if (frame->page_id != page_id) frame_->page_id = page_id;
   frame->is_dirty_ = true;
-  replacer_->SetEvictable(frame_->frame_id_, false);
-  replacer_->RecordAccess(frame_->frame_id_);
 }
 
 /**
