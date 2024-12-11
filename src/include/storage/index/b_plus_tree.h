@@ -84,6 +84,9 @@ class BPlusTree {
   // Return the page id of the root node
   auto GetRootPageId() -> page_id_t;
 
+  // Get the nearest leaf
+  auto GetLeaf(const KeyType &key) -> LeafPage *;
+
   // Index iterator
   auto Begin() -> INDEXITERATOR_TYPE;
 

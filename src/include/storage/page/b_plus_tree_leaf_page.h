@@ -10,11 +10,13 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "storage/page/b_plus_tree_page.h"
+#include "type/value.h"
 
 namespace bustub {
 
@@ -63,7 +65,10 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   // Helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
+  auto SetKeyAt(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> bool;
   auto KeyAt(int index) const -> KeyType;
+  auto ValueAt(int index) const -> ValueType;
+  auto LookUp(const KeyType &key, const KeyComparator &comparator) const -> std::optional<ValueType>;
 
   /**
    * @brief For test only return a string representing all keys in

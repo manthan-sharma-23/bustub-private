@@ -1,5 +1,8 @@
 #include "storage/index/b_plus_tree.h"
+#include "common/config.h"
 #include "storage/index/b_plus_tree_debug.h"
+#include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 
@@ -21,7 +24,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return header_page_id_ == INVALID_PAGE_ID; }
 
 /*****************************************************************************
  * SEARCH
@@ -33,10 +36,16 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result) -> bool {
-  // Declaration of context instance.
-  Context ctx;
-  (void)ctx;
-  return false;
+  if (IsEmpty()) return false;
+  auto leaf = GetLeaf(key);
+
+  auto rid = leaf->LookUp(key, comparator_);
+
+  if (!rid.has_value()) return false;
+
+  result->push_back(rid.value());
+
+  return true;
 }
 
 /*****************************************************************************
@@ -51,12 +60,47 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
-  // Declaration of context instance.
-  Context ctx;
-  (void)ctx;
-  return false;
+  if (IsEmpty()) {
+    page_id_t new_leaf_page_id = bpm_->NewPage();
+    auto new_leaf_guard = bpm_->WritePage(new_leaf_page_id);
+    header_page_id_ = new_leaf_page_id;
+    auto new_leaf_page = new_leaf_guard.AsMut<LeafPage>();
+    new_leaf_page->Init();
+    new_leaf_page->SetNextPageId(INVALID_PAGE_ID);
+    new_leaf_page->SetKeyAt(key, value, comparator_);
+    return true;
+  }
+
+  auto leaf = GetLeaf(key);
+  auto is_insertion_success = leaf->SetKeyAt(key, value, comparator_);
+
+  if (!is_insertion_success) {
+    return false;
+  }
+
+  if (leaf->IsOverflow()) split(leaf);
+
+  return 0;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetLeaf(const KeyType &key) -> LeafPage * {
+  if (IsEmpty()) return nullptr;
+
+  page_id_t page_id = header_page_id_;
+  while (true) {
+    auto guard = bpm_->ReadPage(page_id);
+    auto page = guard.template As<BPlusTreePage>();
+    if (page->IsLeafPage()) {
+      auto leaf = const_cast<LeafPage *>(reinterpret_cast<const LeafPage *>(page));
+      return leaf;
+    } else {
+      auto internal = const_cast<InternalPage *>(reinterpret_cast<const InternalPage *>(page));
+      page_id = internal->Lookup(key, comparator_);
+    }
+  }
+  return nullptr;
+};
 /*****************************************************************************
  * REMOVE
  *****************************************************************************/
